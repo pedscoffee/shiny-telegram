@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reset Clinical Smart Phrase</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f5f1e8;
+        color: #18323a;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(560px, calc(100vw - 32px));
+        background: #ffffff;
+        border: 1px solid #d9ded9;
+        border-radius: 8px;
+        padding: 24px;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: 24px;
+      }
+
+      p {
+        line-height: 1.5;
+      }
+
+      a {
+        color: #0d5f7a;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Resetting local site data</h1>
+      <p id="status">Clearing service workers and caches...</p>
+      <p><a href="./">Return to the app</a></p>
+    </main>
+    <script>
+      async function reset() {
+        const status = document.getElementById("status");
+
+        if ("serviceWorker" in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+        }
+
+        if ("caches" in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((key) => caches.delete(key)));
+        }
+
+        status.textContent = "Done. Return to the app and refresh once.";
+      }
+
+      reset().catch((error) => {
+        document.getElementById("status").textContent =
+          "Reset failed. Use DevTools > Application > Service Workers > Unregister.";
+        console.error(error);
+      });
+    </script>
+  </body>
+</html>

@@ -114,28 +114,6 @@ function App() {
   const formattedText = useMemo(() => toPlainText(draft, matches), [draft, matches]);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .getRegistrations()
-        .then((registrations) => {
-          registrations.forEach((registration) => registration.unregister());
-        })
-        .catch(() => undefined);
-    }
-
-    if ("caches" in window) {
-      caches
-        .keys()
-        .then((keys) => {
-          keys
-            .filter((key) => key.startsWith("clinical-smart-phrase"))
-            .forEach((key) => caches.delete(key));
-        })
-        .catch(() => undefined);
-    }
-  }, []);
-
-  useEffect(() => {
     const handle = window.setTimeout(() => {
       generateNote(input, temperature + generationKey * 0.03);
     }, 500);
