@@ -116,8 +116,21 @@ function App() {
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker
-        .register("./public-sw.js")
-        .then((registration) => registration.update())
+        .getRegistrations()
+        .then((registrations) => {
+          registrations.forEach((registration) => registration.unregister());
+        })
+        .catch(() => undefined);
+    }
+
+    if ("caches" in window) {
+      caches
+        .keys()
+        .then((keys) => {
+          keys
+            .filter((key) => key.startsWith("clinical-smart-phrase"))
+            .forEach((key) => caches.delete(key));
+        })
         .catch(() => undefined);
     }
   }, []);
