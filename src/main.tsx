@@ -115,7 +115,10 @@ function App() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./public-sw.js").catch(() => undefined);
+      navigator.serviceWorker
+        .register("./public-sw.js")
+        .then((registration) => registration.update())
+        .catch(() => undefined);
     }
   }, []);
 
