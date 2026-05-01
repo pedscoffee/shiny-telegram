@@ -45,63 +45,113 @@
 
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/lib/index.min.js"></script>
 
-  <script type="module">
-    import * as webllm from "https://esm.run/@mlc-ai/web-llm";
-
+  <script>
     const { useState, useEffect, useRef } = React;
+    const webllm = window.mlc;
 
     // Clinical boilerplate templates
     const BOILERPLATE_RULES = {
-      'chest pain': {
-        keywords: ['chest pain', 'cp', 'chest discomfort', 'angina'],
-        text: 'Return precautions reviewed: return immediately for worsening chest pain, shortness of breath, syncope, or radiation to arm/jaw. Patient verbalized understanding.'
+      'well_child': {
+        keywords: ['well child', 'wcc', 'health maintenance', 'checkup', 'physical exam', 'well visit'],
+        text: 'All forms, labs, immunizations, and patient concerns reviewed and addressed appropriately. Screening questions, past medical history, past social history, medications, and growth chart reviewed. Age-appropriate anticipatory guidance reviewed and printed in AVS. Parent questions addressed.'
       },
-      'headache': {
-        keywords: ['headache', 'ha', 'cephalgia', 'migraine'],
-        text: 'Return precautions: return for severe/sudden onset headache, vision changes, weakness, confusion, fever with stiff neck. Patient instructed and verbalizes understanding.'
+      'illness': {
+        keywords: ['illness', 'sick', 'uri', 'viral', 'cold', 'flu', 'infection', 'fever', 'cough', 'congestion', 'sore throat', 'runny nose'],
+        text: 'Recommended supportive care with OTC medications as needed. Return precautions given including increasing pain, worsening fever, dehydration, new symptoms, prolonged symptoms, worsening symptoms, and other concerns. Caregiver expressed understanding and agreement with treatment plan.'
       },
-      'abdominal pain': {
-        keywords: ['abdominal pain', 'abd pain', 'belly pain', 'stomach pain'],
-        text: 'Return if: fever >101°F, severe pain, vomiting blood, bloody stools, unable to tolerate liquids. Discussed and patient verbalizes understanding.'
+      'injury': {
+        keywords: ['injury', 'fracture', 'sprain', 'strain', 'trauma', 'fall', 'laceration', 'contusion', 'bruise'],
+        text: 'Recommended supportive care with Tylenol, Motrin, rest, ice, compression, elevation, and gradual return to activity as appropriate. Return precautions given including increasing pain, swelling, or failure to improve.'
       },
-      'pediatric fever': {
-        keywords: ['fever', 'febrile', 'temperature', 'pyrexia'],
-        text: 'Fever management discussed: acetaminophen/ibuprofen dosing provided, adequate hydration emphasized. Return for temperature >104°F, lethargy, rash, difficulty breathing, or parental concern.'
+      'ear_infection': {
+        keywords: ['otitis media', 'ear infection', 'aom', 'otalgia', 'ear pain'],
+        text: 'Risk of untreated otitis media includes persistent pain and fever, hearing loss, and mastoiditis.'
       },
-      'antibiotic': {
-        keywords: ['antibiotic', 'abx', 'amoxicillin', 'azithromycin', 'cephalexin'],
-        text: 'Antibiotic education: complete full course even if feeling better, take with food if GI upset occurs, return for rash/reaction.'
+      'strep': {
+        keywords: ['strep', 'strep throat', 'pharyngitis', 'streptococcal', 'rapid strep'],
+        text: 'Risk of untreated strep throat includes rheumatic fever and peritonsillar abscess. This problem is moderate risk due to pending lab results which may necessitate further pharmacologic management.'
       },
-      'stroke risk': {
-        keywords: ['tia', 'stroke', 'cva', 'transient ischemic'],
-        text: 'STROKE RISK: High-risk features discussed. Urgent neurology referral placed. Return immediately for any weakness, speech changes, vision loss, or severe headache. Code stroke protocol if symptoms recur.'
+      'dehydration': {
+        keywords: ['dehydration', 'vomiting', 'diarrhea', 'decreased urination', 'emesis', 'gastroenteritis'],
+        text: 'Patient is at risk for dehydration, which would warrant emergency room care or admission for IV fluids.'
       },
-      'suicidal': {
-        keywords: ['suicidal', 'si', 'self-harm', 'suicide'],
-        text: 'SAFETY ASSESSMENT: Suicide risk assessed. Crisis resources provided (988 Suicide & Crisis Lifeline). [Specify disposition: psychiatric consultation obtained / safety plan established / family notified]'
+      'breathing': {
+        keywords: ['trouble breathing', 'respiratory distress', 'wheezing', 'shortness of breath', 'dyspnea', 'asthma', 'bronchiolitis'],
+        text: 'Patient is at risk for worsening respiratory distress and clinical deterioration, which would need emergency room care or hospital admission.'
+      },
+      'pcmh': {
+        keywords: ['adhd', 'obesity', 'strep throat'],
+        text: 'PCMH Reminder'
       }
     };
+
+    // Available models with hardware recommendations
+    const AVAILABLE_MODELS = [
+      {
+        id: 'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+        name: 'Llama 3.2 1B (Fast)',
+        size: '~0.5GB',
+        speed: 'Very Fast',
+        quality: 'Good',
+        hardware: 'Works on most devices, including older laptops',
+        recommended: 'Best for: Low-end hardware, quick testing'
+      },
+      {
+        id: 'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+        name: 'Llama 3.2 3B (Balanced)',
+        size: '~1.8GB',
+        speed: 'Fast',
+        quality: 'Very Good',
+        hardware: 'Recommended for most users',
+        recommended: 'Best for: Balance of speed and quality'
+      },
+      {
+        id: 'Phi-3.5-mini-instruct-q4f16_1-MLC',
+        name: 'Phi 3.5 Mini (Efficient)',
+        size: '~2.3GB',
+        speed: 'Fast',
+        quality: 'Very Good',
+        hardware: 'Good for modern laptops',
+        recommended: 'Best for: Medical/technical tasks'
+      },
+      {
+        id: 'Qwen2.5-3B-Instruct-q4f32_1-MLC',
+        name: 'Qwen 2.5 3B (Alternative)',
+        size: '~1.9GB',
+        speed: 'Fast',
+        quality: 'Very Good',
+        hardware: 'Similar to Llama 3.2 3B',
+        recommended: 'Best for: Alternative option'
+      }
+    ];
 
     const ClinicalSmartPhrase = () => {
       const [input, setInput] = useState('');
       const [output, setOutput] = useState('');
       const [isProcessing, setIsProcessing] = useState(false);
       const [modelLoaded, setModelLoaded] = useState(false);
+      const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[1].id); // Default to Llama 3.2 3B
       const [modelName, setModelName] = useState('');
       const [loadingProgress, setLoadingProgress] = useState('');
       const [error, setError] = useState('');
       const [copySuccess, setCopySuccess] = useState(false);
+      const [showModelSelector, setShowModelSelector] = useState(!modelLoaded);
       
       const engineRef = useRef(null);
       const debounceTimerRef = useRef(null);
 
       useEffect(() => {
         const initEngine = async () => {
+          if (!selectedModel) return;
+          
           try {
             setLoadingProgress('Initializing model engine...');
+            setError('');
+            
             const engine = await webllm.CreateMLCEngine(
-              "Llama-3.2-3B-Instruct-q4f32_1-MLC",
+              selectedModel,
               {
                 initProgressCallback: (progress) => {
                   setLoadingProgress(progress.text);
@@ -110,17 +160,32 @@
             );
             
             engineRef.current = engine;
-            setModelName("Llama-3.2-3B-Instruct");
+            const modelInfo = AVAILABLE_MODELS.find(m => m.id === selectedModel);
+            setModelName(modelInfo ? modelInfo.name : selectedModel);
             setModelLoaded(true);
             setLoadingProgress('');
+            setShowModelSelector(false);
           } catch (err) {
             setError(`Failed to load model: ${err.message}`);
             setLoadingProgress('');
+            setModelLoaded(false);
           }
         };
 
-        initEngine();
-      }, []);
+        if (selectedModel && !modelLoaded) {
+          initEngine();
+        }
+      }, [selectedModel]);
+
+      const handleModelChange = () => {
+        setModelLoaded(false);
+        setShowModelSelector(true);
+        setOutput('');
+        setInput('');
+        if (engineRef.current) {
+          engineRef.current = null;
+        }
+      };
 
       useEffect(() => {
         if (debounceTimerRef.current) {
@@ -162,23 +227,29 @@
         setError('');
         
         try {
-          const prompt = `You are a clinical documentation assistant. Transform the following terse clinical shorthand into a well-formatted assessment and plan note. For each problem mentioned:
+          const prompt = `Reformat the following clinical notes into a structured, problem-oriented format. The output should be extremely concise for rapid scanning.
 
-1. Create a bold problem name/diagnosis
-2. Expand into 3-5 concise, professional bullet points
-3. Use clinical language appropriate for medical records
-4. Keep bullets focused and actionable
+## Rules:
+1. Use **bold** for problem/diagnosis names only
+2. Write 1-5 extremely brief bullet points per problem (ideally under 10 words each)
+3. Use clinical shorthand and standard medical abbreviations (RTC, PRN, BID, etc.)
+4. Use a hyphen (-) for all bullets
+5. Insert blank line between problems
+6. DO NOT use section headers like "Assessment" or "Plan"
+7. DO NOT add any boilerplate text (that will be added separately)
+8. Keep bullets extremely concise - think clinical shorthand
 
-Input shorthand:
+## Input:
 ${text}
 
-Format your response as:
-**Problem Name**
-- Bullet point 1
-- Bullet point 2
-- Bullet point 3
+## Output format example:
+**Asthma**
+- Flovent 44mcg 2 puff BID started
+- Continue albuterol PRN
+- Use spacer
+- RTC 3mo/PRN
 
-Do not add boilerplate text about return precautions - that will be added separately. Focus on clinical assessment and plan.`;
+Format the above input following these exact rules.`;
 
           const messages = [
             { role: "user", content: prompt }
@@ -186,7 +257,7 @@ Do not add boilerplate text about return precautions - that will be added separa
 
           const reply = await engineRef.current.chat.completions.create({
             messages,
-            temperature: 0.7,
+            temperature: 0.3,
             max_tokens: 1000,
           });
 
@@ -236,7 +307,10 @@ Do not add boilerplate text about return precautions - that will be added separa
             return React.createElement('div', { key: idx, style: styles.boilerplate }, content);
           }
           else if (line.trim().startsWith('-')) {
-            return React.createElement('div', { key: idx, style: styles.bullet }, line.trim());
+            // Use 8 spaces for indentation as per formatting rules
+            return React.createElement('div', { key: idx, style: styles.bullet }, 
+              '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0' + line.trim()
+            );
           }
           else if (line.trim() === '') {
             return React.createElement('div', { key: idx, style: { height: '12px' } });
@@ -260,10 +334,64 @@ Do not add boilerplate text about return precautions - that will be added separa
               )
             ),
             
-            modelLoaded && React.createElement('div', { style: styles.modelBadge },
-              React.createElement('div', { style: styles.statusDot }),
-              React.createElement('span', null, modelName)
+            modelLoaded && React.createElement('div', { style: { display: 'flex', gap: '1rem', alignItems: 'center' } },
+              React.createElement('div', { style: styles.modelBadge },
+                React.createElement('div', { style: styles.statusDot }),
+                React.createElement('span', null, modelName)
+              ),
+              React.createElement('button', {
+                onClick: handleModelChange,
+                style: { ...styles.button, ...styles.buttonSecondary, padding: '0.5rem 1rem' }
+              }, 'Change Model')
             )
+          )
+        ),
+
+        showModelSelector && React.createElement('div', { style: styles.modelSelectorOverlay },
+          React.createElement('div', { style: styles.modelSelectorCard },
+            React.createElement('h2', { style: styles.modelSelectorTitle }, 'Select AI Model'),
+            React.createElement('p', { style: styles.modelSelectorSubtitle }, 
+              'Choose a model based on your hardware capabilities'
+            ),
+            
+            React.createElement('div', { style: styles.modelGrid },
+              AVAILABLE_MODELS.map(model => 
+                React.createElement('div', {
+                  key: model.id,
+                  onClick: () => setSelectedModel(model.id),
+                  style: {
+                    ...styles.modelCard,
+                    ...(selectedModel === model.id ? styles.modelCardSelected : {})
+                  }
+                },
+                  React.createElement('div', { style: styles.modelCardHeader },
+                    React.createElement('div', { style: styles.modelCardName }, model.name),
+                    selectedModel === model.id && React.createElement('div', { style: styles.modelCardCheckmark }, '✓')
+                  ),
+                  React.createElement('div', { style: styles.modelCardMeta },
+                    React.createElement('span', { style: styles.modelCardBadge }, model.size),
+                    React.createElement('span', { style: styles.modelCardBadge }, model.speed),
+                    React.createElement('span', { style: styles.modelCardBadge }, model.quality)
+                  ),
+                  React.createElement('p', { style: styles.modelCardHardware }, model.hardware),
+                  React.createElement('p', { style: styles.modelCardRecommended }, model.recommended)
+                )
+              )
+            ),
+            
+            React.createElement('button', {
+              onClick: () => setSelectedModel(selectedModel),
+              disabled: !selectedModel,
+              style: {
+                ...styles.button,
+                ...styles.buttonPrimary,
+                width: '100%',
+                marginTop: '1.5rem',
+                padding: '0.8rem',
+                fontSize: '1rem',
+                ...(!selectedModel && styles.buttonDisabled)
+              }
+            }, 'Load Selected Model')
           )
         ),
 
@@ -291,7 +419,7 @@ Do not add boilerplate text about return precautions - that will be added separa
               React.createElement('textarea', {
                 value: input,
                 onChange: (e) => setInput(e.target.value),
-                placeholder: "Example:\n\ncp - 45M with substernal cp x2h, radiating L arm. ECG NSR, trop neg. Likely MSK vs GERD.\n\nPlan: ASA 325mg, GI cocktail, reassess. Cards consulted.\n\nha - migraine without aura, moderate severity...",
+                placeholder: "Example:\n\nAsthma - wheezing, using albuterol q4h at home. Flovent 44mcg 2 puff BID started. Continue albuterol PRN. Use spacer. RTC 3mo/PRN\n\nWCC - growing and developing well. Reviewed anticipatory guidance. RTC 1yr/PRN\n\nViral URI - supportive care, fluids, Tylenol PRN. Declined COVID test. RTC PRN",
                 style: styles.textarea,
                 disabled: !modelLoaded
               }),
@@ -357,13 +485,14 @@ Do not add boilerplate text about return precautions - that will be added separa
             React.createElement('div', { style: styles.infoCard },
               React.createElement('h3', { style: styles.infoTitle }, 'Supported Boilerplate'),
               React.createElement('ul', { style: styles.infoList },
-                React.createElement('li', null, React.createElement('strong', null, 'Chest Pain:'), ' Cardiac return precautions'),
-                React.createElement('li', null, React.createElement('strong', null, 'Headache:'), ' Neurological warning signs'),
-                React.createElement('li', null, React.createElement('strong', null, 'Abdominal Pain:'), ' GI return criteria'),
-                React.createElement('li', null, React.createElement('strong', null, 'Fever:'), ' Pediatric fever management'),
-                React.createElement('li', null, React.createElement('strong', null, 'Antibiotics:'), ' Medication education'),
-                React.createElement('li', null, React.createElement('strong', null, 'TIA/Stroke:'), ' High-risk warnings'),
-                React.createElement('li', null, React.createElement('strong', null, 'Suicidal Ideation:'), ' Safety assessment documentation')
+                React.createElement('li', null, React.createElement('strong', null, 'Well Child Check:'), ' Forms, labs, immunizations, anticipatory guidance'),
+                React.createElement('li', null, React.createElement('strong', null, 'Illness:'), ' Return precautions for general illness'),
+                React.createElement('li', null, React.createElement('strong', null, 'Injury:'), ' Supportive care, RICE protocol, return precautions'),
+                React.createElement('li', null, React.createElement('strong', null, 'Ear Infection:'), ' Risks of untreated otitis media'),
+                React.createElement('li', null, React.createElement('strong', null, 'Strep Throat:'), ' Rheumatic fever risk, pending lab statement'),
+                React.createElement('li', null, React.createElement('strong', null, 'Dehydration/GI:'), ' IV fluids risk statement'),
+                React.createElement('li', null, React.createElement('strong', null, 'Respiratory:'), ' Distress/deterioration risk'),
+                React.createElement('li', null, React.createElement('strong', null, 'ADHD/Obesity:'), ' PCMH reminder')
               )
             )
           )
@@ -652,9 +781,11 @@ Do not add boilerplate text about return precautions - that will be added separa
         borderBottom: '2px solid #007ba7',
       },
       bullet: {
-        paddingLeft: '1.5rem',
+        paddingLeft: 0,
         marginBottom: '0.5rem',
         color: '#495057',
+        fontFamily: "'IBM Plex Mono', monospace",
+        fontSize: '0.9rem',
       },
       boilerplate: {
         fontStyle: 'italic',
@@ -730,6 +861,101 @@ Do not add boilerplate text about return precautions - that will be added separa
         margin: 0,
         fontSize: '0.8rem',
         color: '#6c757d',
+      },
+      modelSelectorOverlay: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '2rem',
+      },
+      modelSelectorCard: {
+        background: 'white',
+        borderRadius: '16px',
+        padding: '2.5rem',
+        maxWidth: '900px',
+        width: '100%',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+      },
+      modelSelectorTitle: {
+        margin: '0 0 0.5rem 0',
+        fontSize: '1.75rem',
+        fontWeight: 700,
+        color: '#212529',
+      },
+      modelSelectorSubtitle: {
+        margin: '0 0 2rem 0',
+        fontSize: '1rem',
+        color: '#6c757d',
+      },
+      modelGrid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: '1rem',
+      },
+      modelCard: {
+        border: '2px solid #dee2e6',
+        borderRadius: '12px',
+        padding: '1.25rem',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        background: 'white',
+      },
+      modelCardSelected: {
+        border: '2px solid #007ba7',
+        background: 'rgba(0, 123, 167, 0.05)',
+        boxShadow: '0 4px 12px rgba(0, 123, 167, 0.15)',
+      },
+      modelCardHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '0.75rem',
+      },
+      modelCardName: {
+        fontSize: '1.1rem',
+        fontWeight: 700,
+        color: '#212529',
+      },
+      modelCardCheckmark: {
+        fontSize: '1.5rem',
+        color: '#007ba7',
+      },
+      modelCardMeta: {
+        display: 'flex',
+        gap: '0.5rem',
+        marginBottom: '0.75rem',
+        flexWrap: 'wrap',
+      },
+      modelCardBadge: {
+        background: '#e9ecef',
+        padding: '0.25rem 0.6rem',
+        borderRadius: '4px',
+        fontSize: '0.75rem',
+        fontWeight: 600,
+        color: '#495057',
+      },
+      modelCardHardware: {
+        margin: '0 0 0.5rem 0',
+        fontSize: '0.85rem',
+        color: '#495057',
+        lineHeight: '1.5',
+      },
+      modelCardRecommended: {
+        margin: 0,
+        fontSize: '0.8rem',
+        color: '#007ba7',
+        fontWeight: 600,
+        fontStyle: 'italic',
       },
     };
 
