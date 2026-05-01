@@ -1,19 +1,185 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#163a4a" />
-    <meta
-      name="description"
-      content="A local-first clinical smart phrase drafting tool."
-    />
-    <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="icon" href="pwa-icon.svg" type="image/svg+xml" />
-    <title>Clinical Smart Phrase</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScribeFlow AI | Local Clinical Documentation</title>
+    <!-- Tailwind for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .clinical-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        #preview i { color: #475569; font-style: italic; font-size: 0.95em; }
+        .loading-bar { transition: width 0.3s ease; }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b px-6 py-3 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">S</div>
+            <h1 class="text-xl font-semibold text-gray-800">ScribeFlow <span class="text-blue-600 italic text-sm">Local AI</span></h1>
+        </div>
+        <div id="status-container" class="flex items-center gap-4">
+            <select id="model-select" class="text-sm border rounded px-2 py-1 bg-gray-50">
+                <option value="Llama-3-8B-Instruct-q4f16_1-MLC">Llama 3 8B (Recommended)</option>
+                <option value="Phi-3-mini-4k-instruct-q4f16_1-MLC">Phi-3 Mini (Faster)</option>
+            </select>
+            <button id="init-btn" class="bg-blue-600 text-white px-4 py-1.5 rounded-md text-sm font-medium hover:bg-blue-700 transition">Initialize Engine</button>
+            <span id="engine-status" class="text-xs font-medium text-gray-500 uppercase tracking-wider italic">Ready to Load</span>
+        </div>
+    </header>
+
+    <!-- Progress Bar -->
+    <div class="w-full bg-gray-200 h-1 hidden" id="progress-container">
+        <div id="progress-bar" class="bg-blue-500 h-1 loading-bar" style="width: 0%"></div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- Left: Input -->
+        <section class="w-1/2 flex flex-col border-r bg-white p-4">
+            <div class="flex justify-between items-center mb-2">
+                <label class="text-xs font-bold text-gray-400 uppercase tracking-widest">Clinical Shorthand</label>
+                <span class="text-[10px] text-gray-400 italic">Example: "htn - cont lisinopril, f/u 6m. uri - rest, fluids, return if sob"</span>
+            </div>
+            <textarea id="shorthand-input" 
+                class="flex-1 p-4 text-gray-700 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none text-lg leading-relaxed"
+                placeholder="Type shorthand here..."></textarea>
+        </section>
+
+        <!-- Right: Preview -->
+        <section class="w-1/2 flex flex-col bg-slate-50 p-4 overflow-y-auto">
+            <div class="flex justify-between items-center mb-2">
+                <label class="text-xs font-bold text-gray-400 uppercase tracking-widest">Formatted Assessment & Plan</label>
+                <div class="flex gap-2">
+                    <button onclick="copyToClipboard()" class="text-xs text-blue-600 hover:underline">Copy Note</button>
+                </div>
+            </div>
+            <div id="preview" class="bg-white border clinical-shadow rounded-lg p-8 min-h-full prose prose-slate">
+                <p class="text-gray-300 italic">Formatted note will appear here as you type...</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Script Block -->
+    <script type="module">
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+
+        // --- Configuration & Boilerplate Logic ---
+        const BOILERPLATE_MAP = {
+            "uri": "Return to clinic or ER if you experience worsening shortness of breath, high fevers, inability to tolerate fluids, or symptoms persisting beyond 10 days.",
+            "htn": "Continue low sodium diet. Monitor blood pressures at home and bring log to next appointment.",
+            "dm2": "Maintain diabetic foot care. Follow up with ophthalmology for annual dilated eye exam.",
+            "sob": "If shortness of breath becomes severe or occurs at rest, call 911 or proceed to the nearest emergency department immediately.",
+            "flu": "Patient advised to isolate until afebrile for 24 hours. Supportive care with hydration and rest emphasized."
+        };
+
+        let engine;
+        let debounceTimer;
+        const inputArea = document.getElementById('shorthand-input');
+        const previewArea = document.getElementById('preview');
+        const statusText = document.getElementById('engine-status');
+        const progressBar = document.getElementById('progress-bar');
+        const progressContainer = document.getElementById('progress-container');
+
+        // Initialize WebLLM Engine
+        document.getElementById('init-btn').onclick = async () => {
+            const selectedModel = document.getElementById('model-select').value;
+            statusText.innerText = "Loading Model...";
+            progressContainer.classList.remove('hidden');
+            
+            try {
+                engine = await webllm.CreateMLCEngine(selectedModel, {
+                    initProgressCallback: (report) => {
+                        progressBar.style.width = `${report.progress * 100}%`;
+                        statusText.innerText = `Loading: ${Math.round(report.progress * 100)}%`;
+                    }
+                });
+                statusText.innerText = `Ready: ${selectedModel}`;
+                statusText.classList.add('text-green-600');
+                document.getElementById('init-btn').style.display = 'none';
+                progressContainer.classList.add('hidden');
+            } catch (e) {
+                statusText.innerText = "Error loading model.";
+                console.error(e);
+            }
+        };
+
+        // Handle Typing with Debounce
+        inputArea.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(processClinicalNote, 600);
+        });
+
+        async function processClinicalNote() {
+            const rawText = inputArea.value.trim();
+            if (!rawText || !engine) return;
+
+            previewArea.innerHTML = `<div class="animate-pulse text-gray-400 italic">AI is expanding notes...</div>`;
+
+            const prompt = `
+                You are a professional medical scribe. Expand the following clinical shorthand into a formal Assessment and Plan. 
+                - Use bold for problem names.
+                - Use professional, concise medical terminology.
+                - Format each problem as a distinct block.
+                - Use bullet points for the plan.
+                - Do not include any introductory or concluding remarks.
+                
+                Shorthand: ${rawText}
+            `;
+
+            const messages = [
+                { role: "system", content: "You are a clinical assistant that expands shorthand into professional medical notes." },
+                { role: "user", content: prompt }
+            ];
+
+            const reply = await engine.chat.completions.create({ messages });
+            let formattedNote = reply.choices[0].message.content;
+
+            // Apply rule-based boilerplate
+            formattedNote = injectBoilerplate(formattedNote, rawText);
+
+            // Simple Markdown-to-HTML approximation
+            displayNote(formattedNote);
+        }
+
+        function injectBoilerplate(aiText, originalShorthand) {
+            let processed = aiText;
+            const lowerShorthand = originalShorthand.toLowerCase();
+            
+            Object.keys(BOILERPLATE_MAP).forEach(key => {
+                if (lowerShorthand.includes(key)) {
+                    const bp = `<br><i>${BOILERPLATE_MAP[key]}</i>`;
+                    // Attempt to append to the relevant section or just add to end
+                    processed += bp;
+                }
+            });
+            return processed;
+        }
+
+        function displayNote(text) {
+            // Convert Markdown bold and bullets to HTML
+            let html = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n- /g, '<br>• ')
+                .replace(/\n/g, '<br>');
+            
+            previewArea.innerHTML = html;
+        }
+
+        // Global Copy Function
+        window.copyToClipboard = function() {
+            const range = document.createRange();
+            range.selectNode(previewArea);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            document.execCommand("copy");
+            alert("Note copied to clipboard!");
+        };
+    </script>
+</body>
 </html>
