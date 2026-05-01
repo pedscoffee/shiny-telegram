@@ -1,11 +1,8 @@
 const CACHE_PREFIX = "clinical-smart-phrase";
-const CACHE_NAME = `${CACHE_PREFIX}-v2`;
-const APP_SHELL = ["./manifest.webmanifest", "./pwa-icon.svg"];
+const CACHE_NAME = `${CACHE_PREFIX}-v3`;
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
-  );
+  event.waitUntil(caches.open(CACHE_NAME));
   self.skipWaiting();
 });
 
@@ -34,6 +31,12 @@ self.addEventListener("fetch", (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./")))
+      .catch(() =>
+        caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          if (event.request.mode === "navigate") return caches.match("./");
+          return Response.error();
+        })
+      )
   );
 });
